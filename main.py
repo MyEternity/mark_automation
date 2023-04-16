@@ -1,7 +1,6 @@
 """Основной модуль программы для обработки данных файлов, логирования и обертки БД"""
 import datetime
 import os
-import sys
 
 import warnings
 from datetime import datetime
@@ -86,6 +85,8 @@ class DataFileParser(ConsoleLogFile):
                 {"id": 0, "val": "ИНН", "strict": True},
                 {"id": 1, "val": None, "strict": True},
                 {"id": 2, "val": "ФИО", "strict": True},
+                # Торговые марки.
+                {"id": 3, "val": None, "strict": True},
                 # {"id": 4, "val": "Называем файл Своим ФИО-ИНН", "strict": False},
                 {"id": 5, "val": "ЗПОЛНЯТЬ ТОЛЬКО ЖЕЛТЫЕ ЯЧЕЙКИ!!", "strict": False}],
             # Строка с которой начинаются реальные данные у этого формата.
@@ -97,6 +98,8 @@ class DataFileParser(ConsoleLogFile):
         super().__init__()
         self._path = os.getcwd() + '\\'
         self._import_path = self._path + 'import\\'
+        if not os.path.isdir(self._import_path):
+            os.mkdir(self._import_path)
         self._files_list = {_k: [] for _k in self._supported_formats}
 
     @property
@@ -117,15 +120,15 @@ class DataFileParser(ConsoleLogFile):
         # Проверка данных на формат - путем сравнения переданных данных страницы с эталоном.
         for _k in cls._supported_formats.items():
             success = 0
-            format_cols = cls._supported_formats[_k]['cols']
-            for _item in format_cols:
+            # format_cols = cls._supported_formats[_k]['cols']
+            for _item in _k[1]['cols']:
                 if (str(_item['val']).lower() == str(col_array[_item['id']]).lower()) \
                         or _item['val'] is None:
                     success += 1
                 else:
                     break
-                if success == len(format_cols):
-                    return _k, None
+                if success == len(_k[1]['cols']):
+                    return _k[0], None
         return 'Неизвестный формат данных', True
 
     @classmethod
@@ -194,8 +197,8 @@ class DataFileParser(ConsoleLogFile):
             except PermissionError:
                 self.log_data(f'Ошибка доступа к файлу {_full_path}, '
                               f'файл открыт другой программой?')
-            except:
-                self.log_data(f'Ошибка импорта файла ({_full_path}): {sys.exc_info()[0]}')
+            except Exception as ex:
+                self.log_data(f'Ошибка импорта файла ({_full_path}): {ex}')
 
 
 class DatabaseWrapper(ConsoleLogFile):
