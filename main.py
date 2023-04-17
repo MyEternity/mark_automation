@@ -72,23 +72,33 @@ class DataFileParser(ConsoleLogFile):
     _supported_formats = {
         "class_gtins": {
             "cols": [
+                # Номер колонки, имя колонки, строго требовать наличие значений в строке.
                 {"id": 1, "val": "GTIN", "strict": True},
                 {"id": 2, "val": "Наименование товара", "strict": True},
                 {"id": 5, "val": "ИНН произв.", "strict": True},
                 {"id": 6, "val": "ТН ВЭД", "strict": True},
                 {"id": 8, "val": "Артикул", "strict": True}],
+            # Строка откуда начинаются данные.
             "offset": 0,
+            # Этот формат - сохраняется в таблицу.
             "table": "gtin_data",
         },
         "class_order": {
             "cols": [
                 {"id": 0, "val": "ИНН", "strict": True},
-                {"id": 1, "val": None, "strict": True},
+                {"id": 1, "val": None, "strict": False},
                 {"id": 2, "val": "ФИО", "strict": True},
                 # Торговые марки.
                 {"id": 3, "val": None, "strict": True},
-                # {"id": 4, "val": "Называем файл Своим ФИО-ИНН", "strict": False},
-                {"id": 5, "val": "ЗПОЛНЯТЬ ТОЛЬКО ЖЕЛТЫЕ ЯЧЕЙКИ!!", "strict": False}],
+                {"id": 4, "val": None, "strict": True},
+                {"id": 5, "val": "ЗПОЛНЯТЬ ТОЛЬКО ЖЕЛТЫЕ ЯЧЕЙКИ!!", "strict": False},
+                {"id": 6, "val": None, "strict": True},
+                {"id": 7, "val": None, "strict": True},
+                {"id": 8, "val": None, "strict": True},
+                {"id": 9, "val": None, "strict": True},
+                {"id": 10, "val": None, "strict": True},
+                {"id": 11, "val": None, "strict": True},
+                {"id": 12, "val": None, "strict": True}],
             # Строка с которой начинаются реальные данные у этого формата.
             "offset": 2
         }
@@ -111,25 +121,24 @@ class DataFileParser(ConsoleLogFile):
         return self._files_list
 
     @classmethod
-    def detect_data_format(cls, col_array: list = None):
+    def detect_data_format(cls, col_array: list = None, data_format: str = None):
         """
             Проверяет массив numpy на соответствие формату данных.
+        :param data_format: Проверяемый формат
         :param col_array: Входящий массив
-        :return: FormatName, ErrorState
+        :return: Bool
         """
-        # Проверка данных на формат - путем сравнения переданных данных страницы с эталоном.
-        for _k in cls._supported_formats.items():
-            success = 0
-            # format_cols = cls._supported_formats[_k]['cols']
-            for _item in _k[1]['cols']:
-                if (str(_item['val']).lower() == str(col_array[_item['id']]).lower()) \
-                        or _item['val'] is None:
-                    success += 1
-                else:
-                    break
-                if success == len(_k[1]['cols']):
-                    return _k[0], None
-        return 'Неизвестный формат данных', True
+        success = 0
+        format_cols = cls._supported_formats[data_format]['cols']
+        for _item in format_cols:
+            if (str(_item['val']).lower() == str(col_array[_item['id']]).lower()) \
+                    or _item['val'] is None:
+                success += 1
+            else:
+                break
+            if success == len(format_cols):
+                return True
+        return False
 
     @classmethod
     def create_list(cls, in_list: list = None, data_format: str = ''):
@@ -171,29 +180,27 @@ class DataFileParser(ConsoleLogFile):
                     warnings.simplefilter("always")
                     with pd.ExcelFile(_full_path) as xls:
                         for sheet in xls.sheet_names:
-                            data_format, \
-                                error_code = self.detect_data_format(xls.parse(sheet).
-                                                                     columns.tolist())
-                            if not error_code:
-                                item = {
-                                    "file": _full_path,
-                                    "sheet": sheet,
-                                    "data": self.create_list(xls.parse(sheet).values.tolist(),
-                                                             data_format)
-                                }
-                                # Данный тип данных нужно загрузить напрямую в таблицу:
-                                format_table = self._supported_formats[data_format].get('table')
-                                if format_table:
-                                    item['sql'] = \
-                                        f'' \
-                                        f'insert or ignore into {format_table} ' \
-                                        f'values ({build_val_list(data_format)})'
-                                self._files_list[data_format].append(item)
-                                self.log_data(
-                                    f'{file} [{sheet}] - определен как: {data_format}, '
-                                    f'данных: {len(self._files_list[data_format][-1]["data"])} шт.')
-                            else:
-                                self.log_data(f'{file} [{sheet}] - {data_format}, пропускаем.')
+                            for _format in self._supported_formats:
+                                if self.detect_data_format(xls.parse(sheet).columns.tolist(), _format):
+                                    item = {
+                                        "file": _full_path,
+                                        "sheet": sheet,
+                                        "data": self.create_list(xls.parse(sheet).values.tolist(),
+                                                                 _format)
+                                    }
+                                    # Данный тип данных нужно загрузить напрямую в таблицу:
+                                    format_table = self._supported_formats[_format].get('table')
+                                    if format_table:
+                                        item['sql'] = \
+                                            f'' \
+                                            f'insert or ignore into {format_table} ' \
+                                            f'values ({build_val_list(_format)})'
+                                    self._files_list[_format].append(item)
+                                    self.log_data(
+                                        f'{file} [{sheet}] - определен как: {_format}, '
+                                        f'данных: {len(self._files_list[_format][-1]["data"])} шт.')
+                                else:
+                                    self.log_data(f'{file} [{sheet}] - {_format}, пропускаем.')
             except PermissionError:
                 self.log_data(f'Ошибка доступа к файлу {_full_path}, '
                               f'файл открыт другой программой?')
